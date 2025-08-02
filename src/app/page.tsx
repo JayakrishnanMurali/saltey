@@ -1,10 +1,9 @@
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { GameBoard } from "@/components/game/GameBoard";
 
 export default function HomePage() {
-  return (
-    <main>
-      <Button>hey</Button>
-    </main>
-  );
+	return (
+		<main>
+			<GameBoard />
+		</main>
+	);
 }
