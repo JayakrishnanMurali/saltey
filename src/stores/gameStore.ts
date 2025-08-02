@@ -1,9 +1,13 @@
 import { generateLevel, isGameComplete, pourWater } from "@/lib/gameLogic";
+import { calculateStars, getLevelById, getNextLevel } from "@/lib/levels";
+import { loadPlayerProgress, updateLevelProgress } from "@/lib/storage";
 import type {
 	GameConfig,
 	GameState,
 	GameStatus,
+	Level,
 	Move,
+	PlayerProgress,
 	Tube,
 } from "@/types/game";
 import { create } from "zustand";
@@ -12,14 +16,19 @@ import { subscribeWithSelector } from "zustand/middleware";
 interface GameStore extends GameState {
 	status: GameStatus;
 	startTime: number | null;
+	playerProgress: PlayerProgress | null;
 
 	// Actions
 	selectTube: (tubeId: string) => void;
 	pourBetweenTubes: (fromId: string, toId: string) => boolean;
 	undoMove: () => void;
 	resetGame: () => void;
+	startLevel: (level: Level) => void;
 	startNewGame: (config?: GameConfig) => void;
 	updateScore: () => void;
+	completeLevel: () => void;
+	goToLevelSelect: () => void;
+	loadProgress: () => void;
 }
 
 const defaultConfig: GameConfig = {
@@ -37,10 +46,11 @@ export const useGameStore = create<GameStore>()(
 		moves: [],
 		isComplete: false,
 		canUndo: false,
-		level: 1,
+		currentLevel: null,
 		score: { moves: 0, time: 0, stars: 0 },
-		status: "idle",
+		status: "levelSelect",
 		startTime: null,
+		playerProgress: null,
 
 		selectTube: (tubeId: string) => {
 			const { selectedTubeId, tubes, pourBetweenTubes } = get();
@@ -97,6 +107,12 @@ export const useGameStore = create<GameStore>()(
 			});
 
 			get().updateScore();
+
+			// Complete level if game is complete
+			if (gameComplete) {
+				get().completeLevel();
+			}
+
 			return true;
 		},
 
@@ -115,8 +131,25 @@ export const useGameStore = create<GameStore>()(
 		},
 
 		resetGame: () => {
-			const { level } = get();
-			get().startNewGame(defaultConfig);
+			const { currentLevel } = get();
+			if (currentLevel) {
+				get().startLevel(currentLevel);
+			}
+		},
+
+		startLevel: (level: Level) => {
+			const tubes = generateLevel(level.config);
+			set({
+				tubes,
+				selectedTubeId: null,
+				moves: [],
+				isComplete: false,
+				canUndo: false,
+				currentLevel: level,
+				score: { moves: 0, time: 0, stars: 0 },
+				status: "playing",
+				startTime: Date.now(),
+			});
 		},
 
 		startNewGame: (config = defaultConfig) => {
@@ -127,6 +160,7 @@ export const useGameStore = create<GameStore>()(
 				moves: [],
 				isComplete: false,
 				canUndo: false,
+				currentLevel: null,
 				score: { moves: 0, time: 0, stars: 0 },
 				status: "playing",
 				startTime: Date.now(),
@@ -134,13 +168,19 @@ export const useGameStore = create<GameStore>()(
 		},
 
 		updateScore: () => {
-			const { moves, startTime } = get();
+			const { moves, startTime, currentLevel } = get();
 			const currentTime = startTime ? Date.now() - startTime : 0;
 
-			// Calculate stars based on moves (simple logic for now)
-			let stars = 3;
-			if (moves.length > 15) stars = 2;
-			if (moves.length > 25) stars = 1;
+			// Calculate stars based on level thresholds if we have a level
+			let stars = 0;
+			if (currentLevel) {
+				stars = calculateStars(moves.length, currentLevel);
+			} else {
+				// Fallback for custom games
+				if (moves.length <= 15) stars = 3;
+				else if (moves.length <= 25) stars = 2;
+				else stars = 1;
+			}
 
 			set({
 				score: {
@@ -150,8 +190,44 @@ export const useGameStore = create<GameStore>()(
 				},
 			});
 		},
+
+		completeLevel: () => {
+			const { currentLevel, score } = get();
+			if (!currentLevel) return;
+
+			// Update progress and save to localStorage
+			const updatedProgress = updateLevelProgress(
+				currentLevel.id,
+				score.moves,
+				score.time,
+				score.stars,
+			);
+
+			set({
+				playerProgress: updatedProgress,
+			});
+		},
+
+		goToLevelSelect: () => {
+			set({
+				status: "levelSelect",
+				tubes: [],
+				selectedTubeId: null,
+				moves: [],
+				isComplete: false,
+				canUndo: false,
+				currentLevel: null,
+				score: { moves: 0, time: 0, stars: 0 },
+				startTime: null,
+			});
+		},
+
+		loadProgress: () => {
+			const progress = loadPlayerProgress();
+			set({ playerProgress: progress });
+		},
 	})),
 );
 
-// Initialize game on first load
-useGameStore.getState().startNewGame();
+// Initialize progress on first load
+useGameStore.getState().loadProgress();

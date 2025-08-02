@@ -34,7 +34,7 @@ export interface GameState {
 	moves: Move[];
 	isComplete: boolean;
 	canUndo: boolean;
-	level: number;
+	currentLevel: Level | null;
 	score: {
 		moves: number;
 		time: number;
@@ -49,4 +49,43 @@ export interface GameConfig {
 	emptyTubes: number;
 }
 
-export type GameStatus = "idle" | "playing" | "completed" | "paused";
+export type GameStatus =
+	| "idle"
+	| "playing"
+	| "completed"
+	| "paused"
+	| "levelSelect";
+
+export type Difficulty = "Easy" | "Medium" | "Hard";
+
+export interface Level {
+	id: number;
+	name: string;
+	difficulty: Difficulty;
+	config: GameConfig;
+	starThresholds: {
+		threeStar: number; // max moves for 3 stars
+		twoStar: number; // max moves for 2 stars
+		oneStar: number; // max moves for 1 star
+	};
+	isUnlocked: boolean;
+}
+
+export interface LevelProgress {
+	levelId: number;
+	completed: boolean;
+	bestScore: {
+		moves: number;
+		time: number;
+		stars: number;
+	} | null;
+	completedAt?: Date;
+}
+
+export interface PlayerProgress {
+	currentLevel: number;
+	totalStars: number;
+	levelsCompleted: number;
+	levelProgress: Record<number, LevelProgress>;
+	lastPlayed?: Date;
+}
